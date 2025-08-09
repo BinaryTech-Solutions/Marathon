@@ -1,0 +1,79 @@
+{-# LANGUAGE DeriveFunctor #-}
+
+import Control.Applicative
+import Control.Monad
+import Data.Semigroup
+import Data.Monoid
+
+-- Task data type
+data Task = Task { description :: String, done :: Bool }
+    deriving (Show)
+
+-- TaskList type with Semigroup, Monoid, Functor
+newtype TaskList a = TaskList { getTasks :: [a] }
+    deriving (Show, Functor)
+
+-- Semigroup: Combine two task lists
+instance Semigroup (TaskList a) where
+    (TaskList a) <> (TaskList b) = TaskList (a <> b)
+
+-- Monoid: Identity is an empty list
+instance Monoid (TaskList a) where
+    mempty = TaskList []
+    mappend = (<>)
+
+-- Applicative: Apply functions to tasks
+instance Applicative TaskList where
+    pure x = TaskList [x]
+    (TaskList fs) <*> (TaskList xs) = TaskList [f x | f <- fs, x <- xs]
+
+-- Monad: Sequence computations
+instance Monad TaskList where
+    return = pure
+    (TaskList xs) >>= f = TaskList (concatMap (getTasks . f) xs)
+
+-- Helper to mark a task as done
+markDone :: Task -> Task
+markDone t = t { done = True }
+
+-- Simulate user adding tasks
+userTasks :: TaskList Task
+userTasks = TaskList
+    [ Task "Buy groceries" False
+    , Task "Finish Haskell homework" False
+    , Task "Read blockchain article" False
+    ]
+
+-- Example: Console simulation
+main :: IO ()
+main = do
+    putStrLn "=== Welcome to TaskMaster ==="
+    
+    -- Semigroup: Merge new tasks with existing
+    let extraTasks = TaskList [Task "Call mom" False]
+    let allTasks = userTasks <> extraTasks
+
+    putStrLn "\nAll Tasks:"
+    mapM_ print (getTasks allTasks)
+
+    -- Functor: Mark all tasks as done in one go
+    let completedTasks = fmap markDone allTasks
+
+    putStrLn "\nTasks after marking done (Functor):"
+    mapM_ print (getTasks completedTasks)
+
+    -- Applicative: Apply multiple transformations
+    let transformations = TaskList [markDone, \t -> t { description = description t ++ " (PRIORITY)" }]
+    let transformedTasks = transformations <*> userTasks
+
+    putStrLn "\nTransformed Tasks (Applicative):"
+    mapM_ print (getTasks transformedTasks)
+
+    -- Monad: Sequence tasks that create more tasks
+    let taskFlow = userTasks >>= \t ->
+            TaskList [t, Task ("Follow-up: " ++ description t) False]
+
+    putStrLn "\nGenerated Follow-up Tasks (Monad):"
+    mapM_ print (getTasks taskFlow)
+
+    putStrLn "\n=== End of Simulation ==="
